@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portal AgNAC</title>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+
+<style>
+:root{
+--azul:#7ec8e3;
+--verde:#8fe3c1;
+--azul-escuro:#2f6f88;
+--cinza:#f4f7f8;
+}
+
+body{margin:0;font-family:Segoe UI,Arial;background:var(--cinza)}
+
+header{display:flex;align-items:center;gap:15px;padding:12px 20px;background:linear-gradient(90deg,var(--verde),var(--azul));color:#083c4a}
+header img{height:90px}
+header h1{font-size:20px;margin:0}
+
+nav{display:flex;flex-wrap:wrap;background:white;border-bottom:1px solid #ddd}
+nav button{flex:1;padding:14px;border:none;background:white;font-weight:600;cursor:pointer}
+nav button:hover{background:#eef7fa}
+
+section{display:none;padding:20px}
+section.active{display:block}
+
+.card{background:white;padding:16px;border-radius:10px;margin-bottom:16px;box-shadow:0 2px 6px rgba(0,0,0,0.08)}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+.gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+
+.gallery img,.gallery video{width:100%;border-radius:8px}
+
+input,button{padding:10px;font-size:14px}
+iframe{width:100%;height:420px;border:none}
+
+.table{width:100%;border-collapse:collapse}
+.table th,.table td{padding:10px;border-bottom:1px solid #ddd;text-align:left}
+
+.badge{background:var(--verde);padding:4px 8px;border-radius:6px;font-size:12px;margin:4px 0}
+.notice{background:#fff3cd;padding:12px;border-radius:6px;margin-bottom:10px;border:1px solid #ffe69c}
+</style>
+
+<script defer>
+
+/* =====================
+CONFIGURAÇÃO
+===================== */
+
+const ADMIN_MODE = false
+
+function applyAdminMode(){
+ const adminEls=document.querySelectorAll('.admin-only')
+ adminEls.forEach(el=>{
+  if(!ADMIN_MODE){
+   el.style.display='none'
+  }
+ })
+}
+
+/* Cole aqui as credenciais do seu Firebase */
+const firebaseConfig = {
+  apiKey: "AIzaSyCwA10B2gR36LMnYw8kL3zkujZAt4a5BUw",
+  authDomain: "intranet-8c89b.firebaseapp.com",
+  projectId: "intranet-8c89b",
+  storageBucket: "intranet-8c89b.firebasestorage.app",
+  messagingSenderId: "876969146624",
+  appId: "1:876969146624:web:a79c61d01722d30d8d5be5",
+  measurementId: "G-50YX847X17"
+}
+
+firebase.initializeApp(firebaseConfig)
+
+const db = firebase.firestore()
+db.enablePersistence().catch(()=>{})
+const storage = firebase.storage()
+
+/* =====================
+NAVIGATION
+===================== */
+
+function showTab(id){
+ const sections=document.querySelectorAll("section")
+ sections.forEach(s=>s.classList.remove("active"))
+ const selected=document.getElementById(id)
+ if(selected) selected.classList.add("active")
+}
+
+/* =====================
+DATA
+===================== */
+
+const hoje=new Date()
+
+const meses=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
+
+function getWeekNumber(d){
+ d=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()))
+ d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7))
+ const yearStart=new Date(Date.UTC(d.getUTCFullYear(),0,1))
+ return Math.ceil((((d-yearStart)/86400000)+1)/7)
+}
+
+/* =====================
+ANIVERSÁRIOS
+===================== */
+
+const aniversariantes=[
+{name:"Isabella Oliveira",dia:3,mes:1},
+{name:"Anna Marcella",dia:6,mes:1},
+{name:"Laís Araújo",dia:24,mes:1},
+{name:"Maria Luiza",dia:22,mes:1},
+{name:"João Vitor Souza",dia:16,mes:2},
+{name:"Luiz Felipe",dia:17,mes:3},
+{name:"Valentina Medina",dia:5,mes:4},
+{name:"Vitória Matos",dia:22,mes:4},
+{name:"Danilo",dia:28,mes:4},
+{name:"Rafael",dia:12,mes:5},
+{name:"Aaron",dia:14,mes:5},
+{name:"Nicanor Amaral",dia:14,mes:5},
+{name:"Bianca Mendes",dia:31,mes:5},
+{name:"Luísa Alves",dia:20,mes:6},
+{name:"Isabella Simões",dia:3,mes:7},
+{name:"Lucas Simões",dia:3,mes:7},
+{name:"Felipe Simões",dia:3,mes:7},
+{name:"Maria Eduarda",dia:18,mes:7},
+{name:"Arthur Portelinha",dia:20,mes:7},
+{name:"Emily",dia:22,mes:8},
+{name:"Miguel Passos",dia:15,mes:10},
+{name:"Caleb",dia:17,mes:10},
+{name:"Wallace",dia:23,mes:10},
+{name:"Rafaella Freire",dia:26,mes:10},
+{name:"Fabrício",dia:7,mes:11},
+{name:"Adryan de Lima",dia:22,mes:11},
+{name:"Pedro Kakoi",dia:29,mes:11},
+{name:"Rebecca Gabrielly",dia:1,mes:12},
+{name:"Ytalo Martins",dia:11,mes:12},
+{name:"Fabiana",dia:17,mes:12}
+]
+
+/* =====================
+INIT
+===================== */
+
+window.addEventListener("DOMContentLoaded",()=>{
+ applyAdminMode()
+
+ document.getElementById("mesAtual").innerText=meses[hoje.getMonth()] + " " + hoje.getFullYear()
+
+ const semana=getWeekNumber(hoje)
+ document.getElementById("tituloSemana").innerText="Relatórios da Semana " + semana
+
+ const mesAtualNumero=hoje.getMonth()+1
+
+ aniversariantes
+ .filter(a=>a.mes===mesAtualNumero)
+ .forEach(a=>{
+  const div=document.createElement("div")
+  div.className="badge"
+  div.innerText=`${a.name} - ${a.dia}/${a.mes}`
+  document.getElementById("listaAniversarios").appendChild(div)
+ })
+
+ carregarAlunos()
+ carregarGaleria()
+
+})
+
+/* =====================
+ALUNOS FIRESTORE
+===================== */
+
+async function cadastrarAluno(){
+ if(!ADMIN_MODE) return
+
+ const nome=document.getElementById("nomeAluno").value
+ const empresa=document.getElementById("empresaAluno").value
+ const cargo=document.getElementById("cargoAluno").value
+
+ if(!nome || !empresa || !cargo){
+  alert("Preencha todos os campos")
+  return
+ }
+
+ await db.collection("alunos").add({
+  nome:nome,
+  empresa:empresa,
+  cargo:cargo
+ })
+
+ document.getElementById("nomeAluno").value=""
+ document.getElementById("empresaAluno").value=""
+ document.getElementById("cargoAluno").value=""
+
+ carregarAlunos()
+}
+
+async function carregarAlunos(){
+ const lista=document.getElementById("listaAlunos")
+ lista.innerHTML=""
+
+ const snapshot=await db.collection("alunos").get()
+
+ snapshot.forEach(doc=>{
+  const a=doc.data()
+  const tr=document.createElement("tr")
+  tr.innerHTML=`<td>${a.nome}</td><td>${a.empresa}</td><td>${a.cargo}</td>`
+  lista.appendChild(tr)
+ })
+}
+
+/* =====================
+UPLOAD PDF FIREBASE
+===================== */
+
+async function uploadPDF(input,num){
+ if(!ADMIN_MODE) return
+
+ const file=input.files[0]
+ if(!file) return
+
+ const ref=storage.ref("relatorios/"+file.name)
+ await ref.put(file)
+
+ const url=await ref.getDownloadURL()
+ mostrarPDF(url,num)
+}
+
+function mostrarPDF(url,num){
+ const container=document.getElementById("pdf"+num)
+ container.innerHTML=`<iframe src="${url}"></iframe>`
+}
+
+/* =====================
+GALERIA FIREBASE
+===================== */
+
+async function uploadMidia(input){
+ if(!ADMIN_MODE) return
+
+ const file=input.files[0]
+ if(!file) return
+
+ const ref=storage.ref("galeria/"+file.name)
+ await ref.put(file)
+
+ carregarGaleria()
+}
+
+async function carregarGaleria(){
+ const gallery=document.getElementById("gallery")
+ gallery.innerHTML=""
+
+ const result=await storage.ref("galeria").listAll()
+
+ for(const item of result.items){
+  const url=await item.getDownloadURL()
+
+  if(item.name.match(/\.(mp4|webm|mov)$/)){
+   const v=document.createElement("video")
+   v.src=url
+   v.controls=true
+   gallery.appendChild(v)
+  }else{
+   const img=document.createElement("img")
+   img.src=url
+   gallery.appendChild(img)
+  }
+ }
+}
+
+/* =====================
+RESUMO
+===================== */
+
+function gerarResumo(){
+ document.getElementById("resumoIA").innerText="Resumo automático: os relatórios indicam evolução nas atividades da turma."
+}
+
+</script>
+</head>
+
+<body>
+
+<div id="app">
+
+<header>
+<img src="./logo.png" alt="Logo">
+<div>
+<h1>Portal AgNAC</h1>
+<span id="mesAtual"></span>
+</div>
+</header>
+
+<nav>
+<button onclick="showTab('calendario')">Calendário</button>
+<button onclick="showTab('alunos')">Alunos</button>
+<button onclick="showTab('aniversarios')">Aniversários</button>
+<button onclick="showTab('relatorios')">Relatórios</button>
+<button onclick="showTab('galeria')">Galeria</button>
+</nav>
+
+<section id="calendario" class="active">
+<div class="card">
+<h3>Calendário da Turma</h3>
+<iframe src="https://calendar.google.com/calendar/embed?src=pt.brazilian%23holiday%40group.v.calendar.google.com"></iframe>
+</div>
+</section>
+
+<section id="alunos">
+<div class="card">
+<h3 class="admin-only">Cadastro de Alunos</h3>
+<input class="admin-only" id="nomeAluno" placeholder="Nome">
+<input class="admin-only" id="empresaAluno" placeholder="Empresa">
+<input class="admin-only" id="cargoAluno" placeholder="Função">
+<button class="admin-only" onclick="cadastrarAluno()">Cadastrar</button>
+</div>
+
+<div class="card">
+<h3>Lista de Alunos</h3>
+<table class="table">
+<thead>
+<tr><th>Nome</th><th>Empresa</th><th>Função</th></tr>
+</thead>
+<tbody id="listaAlunos"></tbody>
+</table>
+</div>
+</section>
+
+<section id="aniversarios">
+<div class="card">
+<h3>Aniversários do mês</h3>
+<div id="listaAniversarios"></div>
+</div>
+</section>
+
+<section id="relatorios">
+<div class="card">
+<h3 id="tituloSemana"></h3>
+<div class="grid">
+
+<div>
+<label>Relatório 1</label>
+<input class="admin-only" type="file" accept="application/pdf" onchange="uploadPDF(this,1)">
+<div id="pdf1"></div>
+</div>
+
+<div>
+<label>Relatório 2</label>
+<input class="admin-only" type="file" accept="application/pdf" onchange="uploadPDF(this,2)">
+<div id="pdf2"></div>
+</div>
+
+<div>
+<label>Relatório 3</label>
+<input class="admin-only" type="file" accept="application/pdf" onchange="uploadPDF(this,3)">
+<div id="pdf3"></div>
+</div>
+
+<div>
+<label>Relatório 4</label>
+<input class="admin-only" type="file" accept="application/pdf" onchange="uploadPDF(this,4)">
+<div id="pdf4"></div>
+</div>
+
+<div>
+<label>Relatório 5</label>
+<input class="admin-only" type="file" accept="application/pdf" onchange="uploadPDF(this,5)">
+<div id="pdf5"></div>
+</div>
+
+</div>
+</div>
+
+<div class="card">
+<h3>Resumo Automático da Semana</h3>
+<button onclick="gerarResumo()">Gerar resumo</button>
+<p id="resumoIA"></p>
+</div>
+</section>
+
+<section id="galeria">
+<div class="card">
+<input class="admin-only" type="file" accept="image/*,video/*" onchange="uploadMidia(this)">
+</div>
+<div class="gallery" id="gallery"></div>
+</section>
+
+</div>
+
+</body>
+</html>
